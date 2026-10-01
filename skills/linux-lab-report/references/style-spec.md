@@ -127,6 +127,27 @@ rStyle → rFonts → b → bCs → i → iCs → ... → color → ... → sz �
 - 宽度：`tblW w=5000 type=pct`（占满可用宽度）。
 - 列宽：速查卡三列大致等宽；命令表和报错表第一列窄一些。
 
+**字体：表头和数据行都是「中文仿宋 + 英文 Consolas + 五号」**，两者只差一个加粗：
+
+```xml
+<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas" w:eastAsia="仿宋"/>
+<w:sz w:val="21"/><w:szCs w:val="21"/>
+```
+
+这一段**必须在生成末尾由 `normalize_table_font()` 显式写到每个 run 上，不能靠继承**。
+模板里表头的 run 写全了 `rFonts`，但数据行是**空段落**——`set_cell()` 往空段落里填字时
+取不到任何 run 当样板，只能造一个空 `rPr`，字体于是全靠继承：
+
+| 属性 | 继承路径 | 结果 |
+|---|---|---|
+| `ascii` / `hAnsi` | 段落标记 `w:pPr/w:rPr` → Consolas | Consolas ✓ |
+| `eastAsia` | 段落标记没写 → `docDefaults` → **宋体** | 宋体 ✗ |
+| `sz` | 段落标记 → 21 | 五号 ✓ |
+
+段落标记（`w:pPr/w:rPr`）里只有 `{ascii: Consolas, hAnsi: Consolas}`，**没有 `eastAsia`**；
+而 `docDefaults` 是 `ascii="Times New Roman" eastAsia="宋体"`。所以表头仿宋、数据行宋体，
+同一张表两种中文字体，不放大看不出来。`grade.py` 第 19 条查的就是「有没有显式写」。
+
 行数可变——`scripts/labdocx.py` 的 `fit_rows()` 会克隆最后一行来增加行数，克隆出来的行自动带上边框和字体。
 
 ## 页面与页眉
