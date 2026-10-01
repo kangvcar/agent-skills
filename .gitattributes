@@ -1,0 +1,6 @@
+# Office 文档必须按二进制处理：让 git 做行尾转换或文本 diff 会损坏文件，
+# 而 assets/template.docx 是这套 skill 的根本，坏了整个报告生成都跑不通。
+*.docx binary
+*.doc   binary
+*.pdf   binary
+*.png   binary
