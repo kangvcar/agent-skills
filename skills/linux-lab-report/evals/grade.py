@@ -208,6 +208,13 @@ def grade(path):
         # 网络与远程这一块用到的工具名
         'ssh', 'scp', 'sftp', 'ssh-keygen', 'ssh-copy-id', 'ssh-keyscan',
         'nmcli', 'sshd', 'ping6', 'traceroute', 'nslookup', 'dig',
+        # 容器这一块的命令名。yum-config-manager 有 17 个字符，但它是 yum-utils
+        # 装出来的工具名，和 firewall-cmd 是同一类——学生一个字都改不了。
+        'yum-config-manager', 'docker', 'podman', 'buildah', 'skopeo',
+        # 数据库这一块的命令名。mysql_secure_installation 25 个字符带下划线，
+        # 但它是 MariaDB 装出来的脚本名，学生一字不能改。
+        'mysql', 'mariadb', 'mysqldump', 'mysqladmin', 'mysql_install_db',
+        'mysql_secure_installation', 'mysqlshow', 'mysqld',
     }
     #     还有一类同样「学生改不了」的东西：协议和服务自己规定的文件名、配置项、
     #     系统目录。sshd_config、authorized_keys、id_rsa.pub 是 SSH 定死的，
@@ -230,21 +237,74 @@ def grade(path):
         'ipv6.method', 'ipv6.addresses',
         # 系统目录和 NetworkManager 自己的名字
         'network-scripts', 'NetworkManager', 'network-scripts/',
+        # nginx.conf 里的配置指令名。它们既长又带下划线，但和 sshd 的配置键
+        # 是同一类东西——软件自己定的关键字，学生一个字母都改不了。Web 服务器
+        # 这一讲排障时要故意改坏 worker_processes 那一行，再靠 sed 改回来，
+        # 这个字跑不掉。数据库、中间件的配置指令名同理，撞上就照这里加。
+        'worker_processes', 'worker_connections', 'error_log', 'access_log',
+        'log_format', 'server_name', 'keepalive_timeout', 'default_type',
+        'client_max_body_size', 'gzip_types', 'proxy_pass', 'sendfile',
+        'autoindex', 'try_files', 'fastcgi_pass', 'ssl_certificate',
+        # Docker 那一讲要加阿里云的软件源、装三个包，这些名字全是上游定的：
+        # docker-ce / docker-ce-cli / containerd.io 是包名（按名字装，一个字
+        # 都不能改），docker-ce.repo 是阿里云仓库发布出来的配置文件名。
+        # containerd.io 本来就因为 .io 被 DOMAIN 那条误放过，这里明写出来，
+        # 免得以后 DOMAIN 规则一改它就掉出来。
+        'docker-ce', 'docker-ce-cli', 'docker-ce.repo', 'containerd.io',
+        'docker-engine', 'docker-client', 'docker-common',
+        'daemon.json', 'docker.service',
+        # 数据库这一块的外部定死名。和上面的 docker-ce、worker_processes 是
+        # 同一类东西：mariadb-server 是包名（按名字装，一字不能改，14 个字符
+        # 正好越过 12 那条线），character_set_client 是 MariaDB 自己的系统变量名，
+        # default-character-set 是它配置文件里的指令名。数据库、中间件这类实验
+        # 满篇都是「别人的关键字」，撞上就照这里加，别去改实验设计迁就断言。
+        'mariadb', 'mariadb-server', 'mariadb-server.cnf', 'mariadb.service',
+        'mysql-server', 'mysql-server.cnf', 'mysql.service', 'my.cnf.d',
+        'mysql.user', 'mysqld_safe',
+        'character_set_client', 'character_set_results', 'character_set_server',
+        'character_set_database', 'collation_server', 'default-character-set',
+        'utf8mb4', 'utf8mb4_general_ci',
+        # SQL 自己的关键字和系统库名。AUTO_INCREMENT 14 个字符带下划线，可它和
+        # SELECT、WHERE 一样是 SQL 语法的一部分，学生一个字母都改不了 ——
+        # 写建表语句必然带上它。
+        'AUTO_INCREMENT', 'CURRENT_USER', 'information_schema',
+        'performance_schema',
     }
     #     域名也不是文件名。判断「点后面跟着一个常见顶级域」比逐个域名列入白名单
     #     更经得住用，换个例子（www.qq.com、mirrors.aliyun.com）照样认得出来。
     DOMAIN = re.compile(r'\.(com|cn|org|net|edu|gov|io)(\.|$)', re.I)
+    #     第三类「学生改不了」的名字：上游发布出来的源码包。软件包管理这一讲要从
+    #     源码编译，而源码包的下载地址一定长这样——pkg-1.2.3.tar.gz。名字里的版本
+    #     号是上游定的，下载下来一字不能改；想绕开它就只能不写下载命令，那不现实。
+    #     判据用的是「名字里带 -数字.数字 的版本段」，不是一个名字清单：版本号是
+    #     发布产物的硬特征，而学生自己造的文件名（software_project_config.txt）
+    #     没有版本段，照样会被抓出来——和上面 SYS_IDENTS 一个思路，只是这类名字
+    #     无法穷举，只能用形状认。
+    RELEASE = re.compile(r'^[A-Za-z][\w.+-]*-\d+(\.\d+)+[\w.+-]*$')
+
+    #     第四类「学生改不了」的名字：命令自己的**选项**。firewall-cmd 的
+    #     --list-services、--remove-service 分别是 13、14 个字符，可它们和
+    #     sshd_config 一样是外部定死的，一个字都改不了。判据是「紧跟在 - 后面的
+    #     就不是文件名」。
+    #     这里必须看**原文里它前面那个字符**，不能只看 tok 自己：正则从字母起
+    #     匹配，--remove-service 抠出来是 remove-service，开头的横线已经被吃掉，
+    #     所以 tok.startswith('-') 永远判不出来——原来那一行写的正是这个意思，
+    #     但它是死代码，一次都没生效过。
+    TOKEN = re.compile(r'[A-Za-z][A-Za-z0-9_\.\-]*')
 
     idents = set()
     for t in cmd_green:
-        for tok in re.findall(r'[A-Za-z][A-Za-z0-9_\.\-]*', t):
+        for m in TOKEN.finditer(t):
+            tok = m.group(0)
+            if m.start() > 0 and t[m.start() - 1] == '-':
+                continue
             if tok.lower() in REAL_CMDS:
                 continue
             if tok in SYS_IDENTS:
                 continue
             if DOMAIN.search(tok):
                 continue
-            if tok.startswith('-'):
+            if RELEASE.match(tok):
                 continue
             idents.add(tok)
     unders = sorted(t for t in idents if '_' in t)

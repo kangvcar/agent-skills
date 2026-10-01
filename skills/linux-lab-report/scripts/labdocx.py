@@ -467,13 +467,27 @@ def check_marks(spec):
 
     文档字符串本身和以 # 开头的注释行不扫，那里面写 markdown 是正常的。
     扫的只是会进入文档的字段值。
+
+    顺带也扫控制字符——这一类是 2026-10-01 写 Shell 脚本那一讲时撞上的。
+    spec 里要写终端颜色码，很自然会敲 '\\033[0;32m'；可在 Python 字符串里
+    单个反斜杠的 \\033 是**转义序列**，它不会变成四个字符，而是变成一个真的
+    ESC 字符（0x1B）。这种字符进不了 XML，python-docx 保存时直接抛
+    「All strings must be XML compatible: ... no NULL bytes or control
+    characters」——错在很深的地方，既不说是哪个字段，也看不出跟颜色码有关。
+    写成 '\\\\033' 才是字面的反斜杠加 033。这里提前拦一下，把话说清楚。
     """
     bad = []
+    ctrl = []
 
     def scan(value, where):
         if isinstance(value, str):
             if '**' in value or '##' in value or '`' in value:
                 bad.append('%s: %s' % (where, value.strip()[:50]))
+            for ch in value:
+                if ord(ch) < 32 and ch not in '\t\n':
+                    ctrl.append('%s: 含控制字符 %r（U+%04X）'
+                                % (where, ch, ord(ch)))
+                    break
         elif isinstance(value, (list, tuple)):
             for i, v in enumerate(value):
                 scan(v, '%s[%d]' % (where, i))
@@ -489,6 +503,14 @@ def check_marks(spec):
             'spec 里有 markdown 记号（** ## `），这些会原样打进 Word 变成正文里的'
             '星号/井号/反引号。删掉它们再用中文书名号或引号表达强调：\n  ' +
             '\n  '.join(bad[:12]))
+
+    if ctrl:
+        raise ValueError(
+            'spec 里有控制字符，它们进不了 XML，保存时会报一句看不懂的 lxml 错误。'
+            '最常见的原因是写了 \\033 这类终端颜色码：在 Python 字符串里，单个反斜杠的'
+            '\\033 会被解释成一个真的 ESC 字符，要写成 \\\\033 才能得到字面的反斜杠加 033。'
+            '（数据里如果确实需要真换行，用 \\n 是允许的。）出问题的字段：\n  ' +
+            '\n  '.join(ctrl[:12]))
 
 
 def build_report(spec, out_path, template=DEFAULT_TEMPLATE):
